@@ -1,53 +1,14 @@
-import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert';
+import 'package:google_generative_ai/src/content.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:flutter_gemini/flutter_gemini.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:google_generative_ai/google_generative_ai.dart'; // Make sure this package is included in pubspec.yaml
 import 'package:arcore_flutter_plugin/arcore_flutter_plugin.dart';
 import 'package:vector_math/vector_math_64.dart' as vector;
-
-class Gemini {
-  static Future<GeminiResponse> analyzeImage({
-    required Uint8List imageBytes,
-    required String prompt,
-    required dynamic http,
-  }) async {
-    final String apiUrl = 'https://your-api-endpoint.com/analyze_image';
-    final Map<String, dynamic> requestBody = {
-      'image': base64Encode(imageBytes),
-      'prompt': prompt,
-    };
-
-    try {
-      final http.Response response = await httpClient.post(
-        Uri.parse(apiUrl),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(requestBody),
-      );
-
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> responseData = jsonDecode(response.body);
-
-        List<String> shapes = List<String>.from(responseData['shapes'] ?? []);
-
-        return GeminiResponse(shapes: shapes);
-      } else {
-        print('Error: ${response.statusCode} - ${response.body}');
-        throw Exception('Failed to analyze image');
-      }
-    } catch (e) {
-      print('Error analyzing image: $e');
-      throw Exception('Error analyzing image');
-    }
-  }
-}
-
-class GeminiResponse {
-  final List<String> shapes;
-
-  GeminiResponse({required this.shapes});
-}
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({Key? key}) : super(key: key);
@@ -61,6 +22,9 @@ class _CameraScreenState extends State<CameraScreen> {
   late Future<void> _initializeControllerFuture;
   String _extractedShape = "";
   ArCoreController? arCoreController;
+
+  // Use your actual API key here
+  final String apiKey = 'YOUR_API_KEY_HERE';
 
   @override
   void initState() {
@@ -121,14 +85,24 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<String> sendToGeminiAPI(Uint8List imageBytes) async {
-    final response = await Gemini.analyzeImage(
-      imageBytes: imageBytes,
-      prompt:
-          "Identify all geometric shapes like rectangle, triangle, square, circle, ellipse, hexagon, and complex geometries from the image. Provide only the most suitable one shape name.",
-      http: null,
-    );
+    final model = GenerativeModel(model: 'gemini-1.5-pro', apiKey: apiKey);
 
-    return response.shapes.first;
+    final prompt = TextPart(
+        "Identify all geometric shapes like rectangle, triangle, square, circle, ellipse, hexagon, and complex geometries from the image. Provide only the most suitable one shape name.");
+
+    final imagePart = DataPart('image/jpeg', imageBytes);
+
+    final response = model.generateContentStream([
+      Content.multi([prompt, imagePart])
+    ]);
+
+    // Collect the extracted shape from the stream response
+    StringBuffer extractedShapeBuffer = StringBuffer();
+    await for (final chunk in response) {
+      extractedShapeBuffer.write(chunk.text);
+    }
+
+    return extractedShapeBuffer.toString().trim(); // Return the shape name
   }
 
   void _addShapeToAR(String shape) {
@@ -149,7 +123,6 @@ class _CameraScreenState extends State<CameraScreen> {
             materials: [material], size: vector.Vector3(0.2, 0.2, 0.2));
         node = ArCoreNode(shape: cube, position: vector.Vector3(0, 0, -1));
         break;
-
       default:
         return;
     }
