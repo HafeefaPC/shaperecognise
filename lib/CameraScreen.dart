@@ -24,7 +24,7 @@ class _CameraScreenState extends State<CameraScreen> {
   ArCoreController? arCoreController;
 
   // Use your actual API key here
-  final String apiKey = 'YOUR_API_KEY_HERE';
+  final String apiKey = 'GEMINI_API_KEY';
 
   @override
   void initState() {
